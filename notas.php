@@ -2,11 +2,11 @@
 /**
  * Sistema de Notas Web - Similar ao Simplenote
  * 
- * @version 1.1.8
+ * @version 1.2.0
  */
 
 // Configurações
-define('NOTAS_VERSION', '1.1.8');
+define('NOTAS_VERSION', '1.2.0');
 
 // Carrega o WordPress
 require_once('../wp-load.php');
@@ -455,6 +455,86 @@ if (isset($_GET['action'])) {
             color: #a0aec0;
         }
         
+        /* Estatísticas do editor */
+        .editor-stats {
+            font-size: 12px;
+            color: #6c757d;
+            padding: 10px 20px;
+            border-top: 1px solid #dee2e6;
+            background: #f8f9fa;
+        }
+        
+        body.dark-mode .editor-stats {
+            color: #a0aec0;
+            border-top-color: #4a5568;
+            background: #2d3748;
+        }
+        
+        /* Indicador de salvamento */
+        .save-indicator {
+            font-size: 11px;
+            color: #28a745;
+            margin-left: 10px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .save-indicator.saving {
+            color: #ffc107;
+            opacity: 1;
+        }
+        
+        .save-indicator.saved {
+            color: #28a745;
+            opacity: 1;
+        }
+        
+        body.dark-mode .save-indicator.saving {
+            color: #f6e05e;
+        }
+        
+        body.dark-mode .save-indicator.saved {
+            color: #48bb78;
+        }
+        
+        /* Tooltip para data completa */
+        .note-item {
+            position: relative;
+        }
+        
+        .note-item:hover .date-tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .date-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease;
+            z-index: 100;
+            margin-bottom: 5px;
+        }
+        
+        .date-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: #333;
+        }
+        
         .back-btn {
             padding: 8px 16px;
             background: #6c757d;
@@ -576,6 +656,7 @@ if (isset($_GET['action'])) {
                     <div class="note-title">${escapeHtml(note.title || 'Nova Nota')}</div>
                     <div class="note-preview">${escapeHtml(stripHtml(note.preview || ''))}</div>
                     <div class="note-date">${formatDate(note.updated_at)}</div>
+                    <div class="date-tooltip">Atualizado: ${formatFullDate(note.updated_at)}</div>
                 </div>
             `).join('');
         }
@@ -621,7 +702,10 @@ if (isset($_GET['action'])) {
             editorContainer.innerHTML = `
                 <div class="editor-header">
                     <button class="back-btn" onclick="backToList()">← Voltar</button>
-                    <button class="delete-btn" onclick="deleteNote()">Deletar</button>
+                    <div style="display: flex; align-items: center;">
+                        <button class="delete-btn" onclick="deleteNote()">Deletar</button>
+                        <span class="save-indicator" id="saveIndicator">Salvo</span>
+                    </div>
                 </div>
                 <div class="editor-content">
                     <input type="text" 
@@ -632,6 +716,9 @@ if (isset($_GET['action'])) {
                     <textarea class="note-content-input" 
                               id="noteContentInput" 
                               placeholder="Comece a escrever...">${escapeHtml(currentNote.content || '')}</textarea>
+                </div>
+                <div class="editor-stats" id="editorStats">
+                    ${countWordsAndChars(currentNote.content || '')}
                 </div>
             `;
             
@@ -647,6 +734,12 @@ if (isset($_GET['action'])) {
         function handleNoteChange() {
             const title = document.getElementById('noteTitleInput').value;
             const content = document.getElementById('noteContentInput').value;
+            
+            // Atualiza estatísticas
+            updateStats(content);
+            
+            // Mostra indicador de salvamento
+            showSaveIndicator('saving');
             
             // Se o título estiver vazio, usa as primeiras palavras do conteúdo ou "Nova Nota"
             if (title.trim() === '') {
@@ -683,6 +776,9 @@ if (isset($_GET['action'])) {
                 
                 const updatedNote = await response.json();
                 
+                // Mostra indicador de salvo
+                showSaveIndicator('saved');
+                
                 // Atualiza a nota na lista
                 const index = notes.findIndex(n => n.id === updatedNote.id);
                 if (index !== -1) {
@@ -698,6 +794,7 @@ if (isset($_GET['action'])) {
                 }
             } catch (error) {
                 console.error('Erro ao salvar nota:', error);
+                showSaveIndicator('error');
             }
         }
 
@@ -802,6 +899,104 @@ if (isset($_GET['action'])) {
             
             return date.toLocaleDateString('pt-BR');
         }
+        
+        function formatFullDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit', 
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        function countWordsAndChars(text) {
+            const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+            const chars = text.length;
+            return `${words} palavras | ${chars} caracteres`;
+        }
+        
+        function updateStats(content) {
+            const statsElement = document.getElementById('editorStats');
+            if (statsElement) {
+                statsElement.textContent = countWordsAndChars(content);
+            }
+        }
+        
+        function showSaveIndicator(status) {
+            const indicator = document.getElementById('saveIndicator');
+            if (!indicator) return;
+            
+            indicator.className = 'save-indicator';
+            
+            switch(status) {
+                case 'saving':
+                    indicator.textContent = 'Salvando...';
+                    indicator.classList.add('saving');
+                    break;
+                case 'saved':
+                    indicator.textContent = 'Salvo';
+                    indicator.classList.add('saved');
+                    // Esconder após 2 segundos
+                    setTimeout(() => {
+                        indicator.className = 'save-indicator';
+                    }, 2000);
+                    break;
+                case 'error':
+                    indicator.textContent = 'Erro';
+                    indicator.style.color = '#dc3545';
+                    setTimeout(() => {
+                        indicator.className = 'save-indicator';
+                        indicator.style.color = '';
+                    }, 2000);
+                    break;
+            }
+        }
+        
+        // Atalhos de teclado
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+N: Nova nota
+            if (e.ctrlKey && e.key === 'n') {
+                e.preventDefault();
+                createNote();
+            }
+            
+            // Ctrl+S: Forçar salvamento
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                if (currentNote) {
+                    clearTimeout(saveTimeout);
+                    saveNote();
+                }
+            }
+            
+            // Ctrl+D: Deletar nota atual
+            if (e.ctrlKey && e.key === 'd') {
+                e.preventDefault();
+                if (currentNote) {
+                    deleteNote();
+                }
+            }
+            
+            // Esc: Voltar para lista (mobile)
+            if (e.key === 'Escape' && window.innerWidth <= 767) {
+                const sidebar = document.getElementById('sidebar');
+                const editor = document.getElementById('editorContainer');
+                
+                if (sidebar && editor) {
+                    if (sidebar.classList.contains('hidden')) {
+                        backToList();
+                    }
+                }
+            }
+            
+            // Ctrl+F: Focar na busca
+            if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                document.getElementById('searchInput').focus();
+            }
+        });
 
         // Event Listeners
         document.getElementById('newNoteBtn').addEventListener('click', createNote);
