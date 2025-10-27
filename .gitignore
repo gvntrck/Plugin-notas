@@ -1,0 +1,10 @@
+# Ignorar arquivos do Windsurf/VSCode
+resources/
+node_modules/
+*.log
+*.tmp
+.vscode/
+out/
+
+# Manter apenas o arquivo notas.php
+!notas.php
