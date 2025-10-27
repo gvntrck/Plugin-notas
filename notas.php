@@ -2,11 +2,11 @@
 /**
  * Sistema de Notas Web - Similar ao Simplenote
  * 
- * @version 1.1.7
+ * @version 1.1.8
  */
 
 // Configurações
-define('NOTAS_VERSION', '1.1.7');
+define('NOTAS_VERSION', '1.1.8');
 
 // Carrega o WordPress
 require_once('../wp-load.php');
@@ -507,7 +507,9 @@ if (isset($_GET['action'])) {
 </head>
 <body>
     <button class="theme-toggle" id="themeToggle" title="Alternar tema">
-        🌙
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
     </button>
     <div class="container-fluid">
         <div class="row h-100">
@@ -809,17 +811,21 @@ if (isset($_GET['action'])) {
         const themeToggle = document.getElementById('themeToggle');
         const body = document.body;
         
+        // Ícones SVG
+        const moonIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+        const sunIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+        
         // Carrega tema salvo (padrão: dark mode)
         const savedTheme = localStorage.getItem('notas-theme');
         if (savedTheme !== 'light') {
             body.classList.add('dark-mode');
-            themeToggle.textContent = '☀️';
+            themeToggle.innerHTML = sunIcon;
         }
         
         themeToggle.addEventListener('click', () => {
             body.classList.toggle('dark-mode');
             const isDark = body.classList.contains('dark-mode');
-            themeToggle.textContent = isDark ? '☀️' : '🌙';
+            themeToggle.innerHTML = isDark ? sunIcon : moonIcon;
             localStorage.setItem('notas-theme', isDark ? 'dark' : 'light');
         });
 
