@@ -1,27 +1,46 @@
-SISTEMA DE NOTAS WEB - SUGESTÕES DE MELHORIAS
+SISTEMA DE NOTAS WEB - ROADMAP DE MELHORIAS
+=============================================
+
+📊 STATUS ATUAL: v1.2.0 (4/4 melhorias rápidas conclúıdas)
+🎯 PRÓXIMA VERSÃO: v1.3.0 (melhorias médias)
+
+RESUMO DAS MELHORIAS IMPLEMENTADAS:
+===================================
+
+✅ v1.2.0 - MELHORIAS RÁPIDAS CONCLUÍDAS:
+   • Contador de palavras/caracteres em tempo real
+   • Atalhos de teclado (Ctrl+N, Ctrl+S, Ctrl+D, Esc, Ctrl+F)
+   • Timestamp detalhado com tooltip
+   • Indicador visual de salvamento
+
+🔄 v1.3.0 - PRÓXIMAS MELHORIAS MÉDIAS:
+   • Exportar nota (copiar/download .txt)
+   • Ordenação da lista (data/título/tamanho)
+   • Backup local (JSON)
+
 ===============================================
 
-🚀 MELHORIAS RÁPIDAS (1-2 linhas de código)
-============================================
+🚀 MELHORIAS RÁPIDAS (1-2 linhas de código) ✅ CONCLUÍDAS
+====================================================
 
-1. CONTADOR DE CARACTERES/PALAVRAS
+✅ 1. CONTADOR DE CARACTERES/PALAVRAS - IMPLEMENTADO (v1.2.0)
    - Mostrar estatísticas no rodapé do editor
    - Ex: "142 palavras | 894 caracteres"
    - Útil para quem escreve textos com limites
 
-2. ATALHOS DE TECLADO
+✅ 2. ATALHOS DE TECLADO - IMPLEMENTADO (v1.2.0)
    - Ctrl+N: Nova nota
    - Ctrl+S: Forçar salvamento (feedback visual)
    - Ctrl+D: Deletar nota atual
    - Esc: Voltar para lista (mobile)
    - Ctrl+F: Focar na busca
 
-3. TIMESTAMP MAIS DETALHADO
+✅ 3. TIMESTAMP MAIS DETALHADO - IMPLEMENTADO (v1.2.0)
    - Mostrar data completa no hover do item da nota
    - Ex: "Criado em: 27/10/2025 18:54"
    - Atualizado em: 27/10/2025 18:56
 
-4. INDICADOR DE SALVAMENTO
+✅ 4. INDICADOR DE SALVAMENTO - IMPLEMENTADO (v1.2.0)
    - Texto "Salvando..." / "Salvo" no editor
    - Feedback visual do auto-save
    - Ícone pequeno ao lado do título
@@ -132,13 +151,17 @@ SISTEMA DE NOTAS WEB - SUGESTÕES DE MELHORIAS
 PRIORIDADE SUGERIDA DE IMPLEMENTAÇÃO
 ===================================
 
-1º - Contador de caracteres/palavras (mais fácil, útil imediato)
-2º - Atalhos de teclado (melhora produtividade)
-3º - Indicador de salvamento (feedback essencial)
-4º - Exportar nota (funcionalidade prática)
-5º - Ordenação da lista (organização)
-6º - Backup local (segurança)
-7º - Demais melhorias conforme necessidade
+✅ CONCLUÍDAS (v1.2.0):
+1º - Contador de caracteres/palavras (mais fácil, útil imediato) ✅
+2º - Atalhos de teclado (melhora produtividade) ✅
+3º - Indicador de salvamento (feedback essencial) ✅
+4º - Timestamp detalhado (informação útil) ✅
+
+🔄 PRÓXIMAS SUGERIDAS:
+5º - Exportar nota (funcionalidade prática)
+6º - Ordenação da lista (organização)
+7º - Backup local (segurança)
+8º - Demais melhorias conforme necessidade
 
 NOTAS DE IMPLEMENTAÇÃO
 ======================
