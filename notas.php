@@ -2,11 +2,11 @@
 /**
  * Sistema de Notas Web - Similar ao Simplenote
  * 
- * @version 1.2.0
+ * @version 1.2.1
  */
 
 // Configurações
-define('NOTAS_VERSION', '1.2.0');
+define('NOTAS_VERSION', '1.2.1');
 
 // Carrega o WordPress
 require_once('../wp-load.php');
@@ -269,13 +269,17 @@ if (isset($_GET['action'])) {
             font-size: 24px;
             font-weight: 600;
             border: none;
-            padding: 10px 0;
+            padding: 12px 16px;
             margin-bottom: 15px;
             width: 100%;
+            background: #f8f9fa;
+            border-radius: 8px;
         }
         
         .note-title-input:focus {
             outline: none;
+            background: #fff;
+            box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.1);
         }
         
         .note-content-input {
@@ -285,10 +289,15 @@ if (isset($_GET['action'])) {
             line-height: 1.6;
             resize: none;
             font-family: inherit;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
         }
         
         .note-content-input:focus {
             outline: none;
+            background: #fff;
+            box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.1);
         }
         
         .empty-state {
@@ -433,9 +442,19 @@ if (isset($_GET['action'])) {
             color: #e9ecef;
         }
         
+        body.dark-mode .note-title-input:focus {
+            background: #4a5568;
+            box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.2);
+        }
+        
         body.dark-mode .note-content-input {
             background: #2d3748;
             color: #e9ecef;
+        }
+        
+        body.dark-mode .note-content-input:focus {
+            background: #4a5568;
+            box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.2);
         }
         
         body.dark-mode .sidebar-footer {
