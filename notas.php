@@ -2,11 +2,11 @@
 /**
  * Sistema de Notas Web - Similar ao Simplenote
  * 
- * @version 1.2.1
+ * @version 1.2.2
  */
 
 
-define('NOTAS_VERSION', '1.2.1');
+define('NOTAS_VERSION', '1.2.2');
 
 
 require_once('../wp-load.php');
@@ -71,7 +71,7 @@ if (isset($_GET['action'])) {
             $data = json_decode(file_get_contents('php://input'), true);
             $id = intval($data['id']);
             $title = sanitize_text_field($data['title']);
-            $content = wp_kses_post($data['content']);
+            $content = sanitize_textarea_field($data['content']);
             
             $wpdb->update(
                 $table_name,
