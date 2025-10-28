@@ -5,18 +5,18 @@
  * @version 1.2.1
  */
 
-// Configurações
+
 define('NOTAS_VERSION', '1.2.1');
 
-// Carrega o WordPress
+
 require_once('../wp-load.php');
 
 global $wpdb;
 
-// Nome da tabela
+
 $table_name = $wpdb->prefix . 'notas_notes';
 
-// Cria a tabela se não existir
+
 $charset_collate = $wpdb->get_charset_collate();
 $sql = "CREATE TABLE IF NOT EXISTS $table_name (
     id bigint(20) NOT NULL AUTO_INCREMENT,
