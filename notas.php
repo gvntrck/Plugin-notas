@@ -2,13 +2,15 @@
 /**
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
- * Version: 1.2.5
+ * Version: 1.2.6
  * Author: gvntrck
+ * Author URI: https://projetoalfa.org
+ * License: GPLv2 or later
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('NOTAS_VERSION', '1.2.5');
+define('NOTAS_VERSION', '1.2.6');
 
 // Configuração da URL /notas
 add_action('init', function() {
@@ -18,6 +20,14 @@ add_action('init', function() {
 add_filter('query_vars', function($vars) {
     $vars[] = 'notas_app';
     return $vars;
+});
+
+// Link na página de plugins
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), function($links) {
+    $url = home_url('/notas');
+    $note_link = '<a href="' . esc_url($url) . '" target="_blank">Acessar Notas</a>';
+    array_unshift($links, $note_link);
+    return $links;
 });
 
 // Renderização do App
