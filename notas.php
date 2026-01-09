@@ -3,7 +3,7 @@
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
  * Version: 1.2.5
- * Author: Cascade
+ * Author: gvntrck
  */
 
 if (!defined('ABSPATH')) exit;
