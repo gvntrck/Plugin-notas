@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
- * Version: 1.2.4
+ * Version: 1.2.5
  * Author: Cascade
  */
 
 if (!defined('ABSPATH')) exit;
 
-define('NOTAS_VERSION', '1.2.4');
+define('NOTAS_VERSION', '1.2.5');
 
 // Configuração da URL /notas
 add_action('init', function() {
@@ -832,7 +832,7 @@ if (isset($_GET['action'])) {
             
             // Debounce para salvar
             clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(() => saveNote(), 500);
+            saveTimeout = setTimeout(() => saveNote(), 3000);
         }
 
         // Salva a nota
