@@ -1,35 +1,68 @@
 <?php
 /**
- * Sistema de Notas Web - Similar ao Simplenote
- * 
- * @version 1.2.2
+ * Plugin Name: Sistema de Notas
+ * Description: Sistema de notas acessível em /notas
+ * Version: 1.2.4
+ * Author: Cascade
  */
 
+if (!defined('ABSPATH')) exit;
 
-define('NOTAS_VERSION', '1.2.2');
+define('NOTAS_VERSION', '1.2.4');
 
+// Configuração da URL /notas
+add_action('init', function() {
+    add_rewrite_rule('^notas/?$', 'index.php?notas_app=1', 'top');
+});
 
-require_once('../wp-load.php');
+add_filter('query_vars', function($vars) {
+    $vars[] = 'notas_app';
+    return $vars;
+});
 
-global $wpdb;
+// Renderização do App
+add_action('template_redirect', function() {
+    if (get_query_var('notas_app')) {
+        notas_render_app();
+        exit;
+    }
+});
 
+// Instalação
+register_activation_hook(__FILE__, function() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'notas_notes';
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        title varchar(255) DEFAULT 'Nova Nota',
+        content longtext,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY updated_at (updated_at)
+    ) $charset_collate;";
+    
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
+    
+    add_rewrite_rule('^notas/?$', 'index.php?notas_app=1', 'top');
+    flush_rewrite_rules();
+});
 
-$table_name = $wpdb->prefix . 'notas_notes';
+function notas_render_app() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'notas_notes';
 
+    // Headers para evitar problemas de CORS e Cache
+    header("Access-Control-Allow-Origin: *");
+    header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type");
+    header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+    header("Cache-Control: post-check=0, pre-check=0", false);
+    header("Pragma: no-cache");
 
-$charset_collate = $wpdb->get_charset_collate();
-$sql = "CREATE TABLE IF NOT EXISTS $table_name (
-    id bigint(20) NOT NULL AUTO_INCREMENT,
-    title varchar(255) DEFAULT 'Nova Nota',
-    content longtext,
-    created_at datetime DEFAULT CURRENT_TIMESTAMP,
-    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY updated_at (updated_at)
-) $charset_collate;";
-
-require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-dbDelta($sql);
 
 // Processa requisições AJAX
 if (isset($_GET['action'])) {
@@ -68,24 +101,48 @@ if (isset($_GET['action'])) {
             exit;
             
         case 'update':
-            $data = json_decode(file_get_contents('php://input'), true);
-            $id = intval($data['id']);
-            $title = sanitize_text_field($data['title']);
-            $content = sanitize_textarea_field($data['content']);
+            // Suporte para JSON e Form Data
+            $inputJSON = file_get_contents('php://input');
+            $data = json_decode($inputJSON, true);
             
-            $wpdb->update(
-                $table_name,
-                array(
-                    'title' => $title,
-                    'content' => $content
-                ),
-                array('id' => $id)
-            );
+            // Se não for JSON, tenta pegar do POST padrão
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $data = $_POST;
+            }
             
-            $note = $wpdb->get_row(
-                $wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $id)
-            );
-            echo json_encode($note);
+            $id = isset($data['id']) ? intval($data['id']) : 0;
+            $title = isset($data['title']) ? sanitize_text_field($data['title']) : '';
+            $content = isset($data['content']) ? implode("\n", array_map('sanitize_textarea_field', explode("\n", $data['content']))) : ''; // Preserva quebras de linha melhor
+            
+            // Se ainda assim não tivermos dados, tenta ler direto do input cru
+            if (!$id && !$title && !$content) {
+                parse_str($inputJSON, $parsed_input);
+                if (!empty($parsed_input)) {
+                    $data = $parsed_input;
+                    $id = isset($data['id']) ? intval($data['id']) : 0;
+                    $title = isset($data['title']) ? sanitize_text_field($data['title']) : '';
+                    $content = isset($data['content']) ? $data['content'] : '';
+                }
+            }
+            
+            if ($id > 0) {
+                $wpdb->update(
+                    $table_name,
+                    array(
+                        'title' => $title,
+                        'content' => $content
+                    ),
+                    array('id' => $id)
+                );
+                
+                $note = $wpdb->get_row(
+                    $wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $id)
+                );
+                echo json_encode($note);
+            } else {
+                http_response_code(400);
+                echo json_encode(['error' => 'Dados inválidos ou ID faltando']);
+            }
             exit;
             
         case 'delete':
@@ -116,7 +173,7 @@ if (isset($_GET['action'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notas - Anotações</title>
+    <title>Notas - Sistema de Anotações</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         * {
@@ -647,6 +704,7 @@ if (isset($_GET['action'])) {
         async function loadNotes() {
             try {
                 const response = await fetch('?action=list');
+                if (!response.ok) throw new Error('Erro na requisição');
                 notes = await response.json();
                 renderNotesList();
                 
@@ -684,6 +742,7 @@ if (isset($_GET['action'])) {
         async function selectNote(id) {
             try {
                 const response = await fetch(`?action=get&id=${id}`);
+                if (!response.ok) throw new Error('Erro na requisição');
                 currentNote = await response.json();
                 renderEditor();
                 renderNotesList();
@@ -781,18 +840,30 @@ if (isset($_GET['action'])) {
             if (!currentNote) return;
             
             try {
+                // Usando URLSearchParams para enviar como form-data, que é menos propenso a bloqueios 403 em alguns servidores
+                const formData = new URLSearchParams();
+                formData.append('id', currentNote.id);
+                formData.append('title', currentNote.title);
+                formData.append('content', currentNote.content);
+
                 const response = await fetch('?action=update', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: JSON.stringify({
-                        id: currentNote.id,
-                        title: currentNote.title,
-                        content: currentNote.content
-                    })
+                    body: formData
                 });
                 
+                if (!response.ok) {
+                     // Tenta ler o erro se for JSON, senão usa status text
+                     let errorMsg = response.statusText;
+                     try {
+                         const errData = await response.json();
+                         if(errData.error) errorMsg = errData.error;
+                     } catch(e) {}
+                     throw new Error(`Erro servidor: ${response.status} ${errorMsg}`);
+                }
+
                 const updatedNote = await response.json();
                 
                 // Mostra indicador de salvo
@@ -821,6 +892,7 @@ if (isset($_GET['action'])) {
         async function createNote() {
             try {
                 const response = await fetch('?action=create');
+                if (!response.ok) throw new Error('Erro na requisição');
                 const newNote = await response.json();
                 
                 notes.unshift({
@@ -877,6 +949,7 @@ if (isset($_GET['action'])) {
                 
                 try {
                     const response = await fetch(`?action=search&q=${encodeURIComponent(query)}`);
+                    if (!response.ok) throw new Error('Erro na requisição');
                     notes = await response.json();
                     renderNotesList();
                 } catch (error) {
@@ -1048,3 +1121,6 @@ if (isset($_GET['action'])) {
     </script>
 </body>
 </html>
+<?php
+}
+?>
