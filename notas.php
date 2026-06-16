@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
- * Version: 1.2.6
+ * Version: 1.2.7
  * Author: gvntrck
  * Author URI: https://projetoalfa.org
  * License: GPLv2 or later
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('NOTAS_VERSION', '1.2.6');
+define('NOTAS_VERSION', '1.2.7');
 
 // Configuração da URL /notas
 add_action('init', function() {
@@ -38,32 +38,42 @@ add_action('template_redirect', function() {
     }
 });
 
-// Instalação
-register_activation_hook(__FILE__, function() {
+function notas_get_table_name() {
     global $wpdb;
-    $table_name = $wpdb->prefix . 'notas_notes';
+    return $wpdb->prefix . 'notas_notes';
+}
+
+function notas_ensure_table() {
+    global $wpdb;
+    $table_name = notas_get_table_name();
     $charset_collate = $wpdb->get_charset_collate();
-    
-    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+
+    $sql = "CREATE TABLE $table_name (
         id bigint(20) NOT NULL AUTO_INCREMENT,
         title varchar(255) DEFAULT 'Nova Nota',
         content longtext,
         created_at datetime DEFAULT CURRENT_TIMESTAMP,
         updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
+        PRIMARY KEY  (id),
         KEY updated_at (updated_at)
     ) $charset_collate;";
-    
+
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     dbDelta($sql);
-    
+}
+
+// Instalação
+register_activation_hook(__FILE__, function() {
+    notas_ensure_table();
+
     add_rewrite_rule('^notas/?$', 'index.php?notas_app=1', 'top');
     flush_rewrite_rules();
 });
 
 function notas_render_app() {
     global $wpdb;
-    $table_name = $wpdb->prefix . 'notas_notes';
+    $table_name = notas_get_table_name();
+    notas_ensure_table();
 
     // Headers para evitar problemas de CORS e Cache
     header("Access-Control-Allow-Origin: *");
@@ -97,16 +107,29 @@ if (isset($_GET['action'])) {
             exit;
             
         case 'create':
-            $wpdb->insert(
+            $inserted = $wpdb->insert(
                 $table_name,
                 array(
                     'title' => 'Nova Nota',
                     'content' => ''
-                )
+                ),
+                array('%s', '%s')
             );
+            if ($inserted === false || !$wpdb->insert_id) {
+                http_response_code(500);
+                echo json_encode(['error' => 'Erro ao criar nota no banco de dados', 'details' => $wpdb->last_error]);
+                exit;
+            }
+
             $note = $wpdb->get_row(
                 $wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $wpdb->insert_id)
             );
+            if (!$note) {
+                http_response_code(500);
+                echo json_encode(['error' => 'Nota criada, mas não foi possível carregá-la']);
+                exit;
+            }
+
             echo json_encode($note);
             exit;
             
@@ -136,18 +159,31 @@ if (isset($_GET['action'])) {
             }
             
             if ($id > 0) {
-                $wpdb->update(
+                $updated = $wpdb->update(
                     $table_name,
                     array(
                         'title' => $title,
                         'content' => $content
                     ),
-                    array('id' => $id)
+                    array('id' => $id),
+                    array('%s', '%s'),
+                    array('%d')
                 );
+                if ($updated === false) {
+                    http_response_code(500);
+                    echo json_encode(['error' => 'Erro ao salvar nota no banco de dados', 'details' => $wpdb->last_error]);
+                    exit;
+                }
                 
                 $note = $wpdb->get_row(
                     $wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $id)
                 );
+                if (!$note) {
+                    http_response_code(404);
+                    echo json_encode(['error' => 'Nota não encontrada para salvar']);
+                    exit;
+                }
+
                 echo json_encode($note);
             } else {
                 http_response_code(400);
@@ -709,6 +745,8 @@ if (isset($_GET['action'])) {
         let notes = [];
         let currentNote = null;
         let saveTimeout = null;
+        let hasPendingChanges = false;
+        let isSaving = false;
 
         // Carrega todas as notas
         async function loadNotes() {
@@ -751,9 +789,15 @@ if (isset($_GET['action'])) {
         // Seleciona uma nota
         async function selectNote(id) {
             try {
+                if (hasPendingChanges && currentNote && String(currentNote.id) !== String(id)) {
+                    clearTimeout(saveTimeout);
+                    await saveNote({ ...currentNote });
+                }
+
                 const response = await fetch(`?action=get&id=${id}`);
                 if (!response.ok) throw new Error('Erro na requisição');
                 currentNote = await response.json();
+                if (!currentNote || !currentNote.id) throw new Error('Nota não encontrada');
                 renderEditor();
                 renderNotesList();
                 showEditor();
@@ -839,22 +883,24 @@ if (isset($_GET['action'])) {
             }
             
             currentNote.content = content;
+            hasPendingChanges = true;
             
             // Debounce para salvar
             clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(() => saveNote(), 3000);
+            saveTimeout = setTimeout(() => saveNote({ ...currentNote }), 3000);
         }
 
         // Salva a nota
-        async function saveNote() {
-            if (!currentNote) return;
+        async function saveNote(noteToSave = currentNote) {
+            if (!noteToSave || !noteToSave.id || isSaving) return false;
+            isSaving = true;
             
             try {
                 // Usando URLSearchParams para enviar como form-data, que é menos propenso a bloqueios 403 em alguns servidores
                 const formData = new URLSearchParams();
-                formData.append('id', currentNote.id);
-                formData.append('title', currentNote.title);
-                formData.append('content', currentNote.content);
+                formData.append('id', noteToSave.id);
+                formData.append('title', noteToSave.title || 'Nova Nota');
+                formData.append('content', noteToSave.content || '');
 
                 const response = await fetch('?action=update', {
                     method: 'POST',
@@ -875,12 +921,19 @@ if (isset($_GET['action'])) {
                 }
 
                 const updatedNote = await response.json();
+                if (!updatedNote || !updatedNote.id) {
+                    throw new Error('Resposta inválida ao salvar nota');
+                }
                 
                 // Mostra indicador de salvo
                 showSaveIndicator('saved');
+                hasPendingChanges = false;
+                if (currentNote && String(currentNote.id) === String(updatedNote.id)) {
+                    currentNote = updatedNote;
+                }
                 
                 // Atualiza a nota na lista
-                const index = notes.findIndex(n => n.id === updatedNote.id);
+                const index = notes.findIndex(n => String(n.id) === String(updatedNote.id));
                 if (index !== -1) {
                     notes[index] = {
                         ...notes[index],
@@ -892,18 +945,31 @@ if (isset($_GET['action'])) {
                     notes.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
                     renderNotesList();
                 }
+                return true;
             } catch (error) {
                 console.error('Erro ao salvar nota:', error);
                 showSaveIndicator('error');
+                return false;
+            } finally {
+                isSaving = false;
             }
         }
 
         // Cria uma nova nota
         async function createNote() {
             try {
-                const response = await fetch('?action=create');
+                if (hasPendingChanges && currentNote) {
+                    clearTimeout(saveTimeout);
+                    await saveNote({ ...currentNote });
+                }
+
+                const response = await fetch('?action=create', {
+                    method: 'POST',
+                    cache: 'no-store'
+                });
                 if (!response.ok) throw new Error('Erro na requisição');
                 const newNote = await response.json();
+                if (!newNote || !newNote.id) throw new Error('Resposta inválida ao criar nota');
                 
                 notes.unshift({
                     id: newNote.id,
@@ -1069,7 +1135,7 @@ if (isset($_GET['action'])) {
                 e.preventDefault();
                 if (currentNote) {
                     clearTimeout(saveTimeout);
-                    saveNote();
+                    saveNote({ ...currentNote });
                 }
             }
             
@@ -1103,6 +1169,29 @@ if (isset($_GET['action'])) {
         // Event Listeners
         document.getElementById('newNoteBtn').addEventListener('click', createNote);
         document.getElementById('searchInput').addEventListener('input', (e) => searchNotes(e.target.value));
+
+        window.addEventListener('pagehide', () => {
+            if (!hasPendingChanges || !currentNote || !currentNote.id) return;
+
+            const formData = new URLSearchParams();
+            formData.append('id', currentNote.id);
+            formData.append('title', currentNote.title || 'Nova Nota');
+            formData.append('content', currentNote.content || '');
+
+            if (navigator.sendBeacon) {
+                const payload = new Blob([formData.toString()], { type: 'application/x-www-form-urlencoded' });
+                navigator.sendBeacon('?action=update', payload);
+            } else {
+                fetch('?action=update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData,
+                    keepalive: true
+                });
+            }
+        });
         
         // Theme toggle
         const themeToggle = document.getElementById('themeToggle');
