@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
- * Version: 1.2.7
+ * Version: 1.2.8
  * Author: gvntrck
  * Author URI: https://projetoalfa.org
  * License: GPLv2 or later
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('NOTAS_VERSION', '1.2.7');
+define('NOTAS_VERSION', '1.2.8');
 
 // Configuração da URL /notas
 add_action('init', function() {
@@ -140,7 +140,7 @@ if (isset($_GET['action'])) {
             
             // Se não for JSON, tenta pegar do POST padrão
             if (json_last_error() !== JSON_ERROR_NONE) {
-                $data = $_POST;
+                $data = wp_unslash($_POST);
             }
             
             $id = isset($data['id']) ? intval($data['id']) : 0;
@@ -198,7 +198,7 @@ if (isset($_GET['action'])) {
             exit;
             
         case 'search':
-            $query = sanitize_text_field($_GET['q']);
+            $query = isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q'])) : '';
             $notes = $wpdb->get_results(
                 $wpdb->prepare(
                     "SELECT id, title, LEFT(content, 100) as preview, updated_at 
