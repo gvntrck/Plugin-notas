@@ -11,6 +11,149 @@
 if (!defined('ABSPATH')) exit;
 
 define('NOTAS_VERSION', '1.2.8');
+define('NOTAS_PIN_OPTION', 'notas_pin_hash');
+define('NOTAS_PIN_COOKIE', 'notas_pin_auth');
+
+function notas_get_pin_hash() {
+    return (string) get_option(NOTAS_PIN_OPTION, '');
+}
+
+function notas_has_pin_configured() {
+    return notas_get_pin_hash() !== '';
+}
+
+function notas_build_pin_cookie_value($expires) {
+    $signature = hash_hmac('sha256', $expires . '|' . notas_get_pin_hash(), wp_salt('auth'));
+    return $expires . '|' . $signature;
+}
+
+function notas_set_pin_cookie() {
+    $expires = time() + WEEK_IN_SECONDS;
+    setcookie(NOTAS_PIN_COOKIE, notas_build_pin_cookie_value($expires), $expires, COOKIEPATH ?: '/', COOKIE_DOMAIN, is_ssl(), true);
+    $_COOKIE[NOTAS_PIN_COOKIE] = notas_build_pin_cookie_value($expires);
+}
+
+function notas_clear_pin_cookie() {
+    setcookie(NOTAS_PIN_COOKIE, '', time() - HOUR_IN_SECONDS, COOKIEPATH ?: '/', COOKIE_DOMAIN, is_ssl(), true);
+    unset($_COOKIE[NOTAS_PIN_COOKIE]);
+}
+
+function notas_is_pin_authorized() {
+    if (!notas_has_pin_configured() || empty($_COOKIE[NOTAS_PIN_COOKIE])) {
+        return false;
+    }
+
+    $cookie = sanitize_text_field(wp_unslash($_COOKIE[NOTAS_PIN_COOKIE]));
+    $parts = explode('|', $cookie, 2);
+    if (count($parts) !== 2) {
+        return false;
+    }
+
+    $expires = (int) $parts[0];
+    if ($expires < time()) {
+        return false;
+    }
+
+    return hash_equals(notas_build_pin_cookie_value($expires), $cookie);
+}
+
+function notas_verify_pin($pin) {
+    $pin = preg_replace('/\D+/', '', (string) $pin);
+    $hash = notas_get_pin_hash();
+
+    return $pin !== '' && $hash !== '' && password_verify($pin, $hash);
+}
+
+add_action('admin_menu', function() {
+    add_options_page(
+        'Sistema de Notas',
+        'Sistema de Notas',
+        'manage_options',
+        'notas-settings',
+        'notas_render_settings_page'
+    );
+});
+
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), function($links) {
+    $settings_url = admin_url('options-general.php?page=notas-settings');
+    $settings_link = '<a href="' . esc_url($settings_url) . '">Configurações</a>';
+    array_unshift($links, $settings_link);
+    return $links;
+});
+
+function notas_render_settings_page() {
+    if (!current_user_can('manage_options')) {
+        wp_die('Você não tem permissão para acessar esta página.');
+    }
+
+    $message = '';
+    $error = '';
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['notas_pin_action'])) {
+        check_admin_referer('notas_save_pin');
+
+        if ($_POST['notas_pin_action'] === 'save') {
+            $pin = isset($_POST['notas_pin']) ? preg_replace('/\D+/', '', wp_unslash($_POST['notas_pin'])) : '';
+            $pin_confirm = isset($_POST['notas_pin_confirm']) ? preg_replace('/\D+/', '', wp_unslash($_POST['notas_pin_confirm'])) : '';
+
+            if (strlen($pin) < 4) {
+                $error = 'O PIN deve ter pelo menos 4 números.';
+            } elseif ($pin !== $pin_confirm) {
+                $error = 'A confirmação do PIN não confere.';
+            } else {
+                update_option(NOTAS_PIN_OPTION, password_hash($pin, PASSWORD_DEFAULT), false);
+                notas_clear_pin_cookie();
+                $message = 'PIN atualizado com sucesso.';
+            }
+        }
+    }
+    ?>
+    <div class="wrap">
+        <h1>Sistema de Notas</h1>
+
+        <?php if ($message): ?>
+            <div class="notice notice-success is-dismissible"><p><?php echo esc_html($message); ?></p></div>
+        <?php endif; ?>
+
+        <?php if ($error): ?>
+            <div class="notice notice-error"><p><?php echo esc_html($error); ?></p></div>
+        <?php endif; ?>
+
+        <form method="post" action="">
+            <?php wp_nonce_field('notas_save_pin'); ?>
+            <input type="hidden" name="notas_pin_action" value="save">
+
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row">Status</th>
+                    <td>
+                        <?php if (notas_has_pin_configured()): ?>
+                            <strong>PIN configurado.</strong>
+                        <?php else: ?>
+                            <strong>PIN ainda não configurado.</strong>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="notas_pin">Novo PIN</label></th>
+                    <td>
+                        <input name="notas_pin" id="notas_pin" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" class="regular-text">
+                        <p class="description">Use pelo menos 4 números. O PIN atual não é exibido.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="notas_pin_confirm">Confirmar PIN</label></th>
+                    <td>
+                        <input name="notas_pin_confirm" id="notas_pin_confirm" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="new-password" class="regular-text">
+                    </td>
+                </tr>
+            </table>
+
+            <?php submit_button('Salvar PIN'); ?>
+        </form>
+    </div>
+    <?php
+}
 
 // Configuração da URL /notas
 add_action('init', function() {
@@ -62,6 +205,125 @@ function notas_ensure_table() {
     dbDelta($sql);
 }
 
+function notas_render_pin_screen($error = '') {
+    $has_pin = notas_has_pin_configured();
+    ?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acessar Notas</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f3f4f6;
+            color: #111827;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 24px;
+        }
+
+        .pin-box {
+            width: 100%;
+            max-width: 360px;
+            background: #fff;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 28px;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+        }
+
+        h1 {
+            margin: 0 0 18px;
+            font-size: 24px;
+            font-weight: 650;
+        }
+
+        .pin-input {
+            width: 100%;
+            height: 48px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 0 14px;
+            font-size: 22px;
+            letter-spacing: 2px;
+            text-align: center;
+            margin-bottom: 14px;
+        }
+
+        .pin-input:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+
+        .pin-button {
+            width: 100%;
+            height: 44px;
+            border: 0;
+            border-radius: 6px;
+            background: #2563eb;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .pin-button:hover {
+            background: #1d4ed8;
+        }
+
+        .pin-alert {
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 14px;
+        }
+
+        .pin-alert.error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
+        .pin-alert.warning {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <main class="pin-box">
+        <h1>Acessar Notas</h1>
+
+        <?php if (!$has_pin): ?>
+            <div class="pin-alert warning">PIN não configurado. Configure em Configurações &gt; Sistema de Notas no painel do WordPress.</div>
+        <?php else: ?>
+            <?php if ($error): ?>
+                <div class="pin-alert error"><?php echo esc_html($error); ?></div>
+            <?php endif; ?>
+
+            <form method="post" action="">
+                <?php wp_nonce_field('notas_pin_login'); ?>
+                <input class="pin-input" type="password" name="notas_pin" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus required>
+                <button class="pin-button" type="submit">Entrar</button>
+            </form>
+        <?php endif; ?>
+    </main>
+</body>
+</html>
+    <?php
+}
+
 // Instalação
 register_activation_hook(__FILE__, function() {
     notas_ensure_table();
@@ -82,6 +344,43 @@ function notas_render_app() {
     header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
     header("Cache-Control: post-check=0, pre-check=0", false);
     header("Pragma: no-cache");
+
+    $pin_error = '';
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['notas_pin'])) {
+        $nonce = isset($_POST['_wpnonce']) ? sanitize_text_field(wp_unslash($_POST['_wpnonce'])) : '';
+        $pin = isset($_POST['notas_pin']) ? wp_unslash($_POST['notas_pin']) : '';
+
+        if (!wp_verify_nonce($nonce, 'notas_pin_login')) {
+            $pin_error = 'Sessão expirada. Tente novamente.';
+        } elseif (notas_verify_pin($pin)) {
+            notas_set_pin_cookie();
+            wp_safe_redirect(home_url('/notas'));
+            exit;
+        } else {
+            $pin_error = 'PIN inválido.';
+        }
+    }
+
+    if (isset($_GET['action'])) {
+        if (!notas_is_pin_authorized()) {
+            header('Content-Type: application/json');
+            http_response_code(401);
+            echo json_encode(['error' => 'PIN obrigatório']);
+            exit;
+        }
+
+        $action_nonce = isset($_REQUEST['_notas_nonce']) ? sanitize_text_field(wp_unslash($_REQUEST['_notas_nonce'])) : '';
+        if (!wp_verify_nonce($action_nonce, 'notas_app_action')) {
+            header('Content-Type: application/json');
+            http_response_code(403);
+            echo json_encode(['error' => 'Token de segurança inválido']);
+            exit;
+        }
+    } elseif (!notas_is_pin_authorized()) {
+        notas_render_pin_screen($pin_error);
+        return;
+    }
 
 
 // Processa requisições AJAX
@@ -742,16 +1041,21 @@ if (isset($_GET['action'])) {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.min.js"></script>
     <script>
+        const notasActionNonce = '<?php echo esc_js(wp_create_nonce('notas_app_action')); ?>';
         let notes = [];
         let currentNote = null;
         let saveTimeout = null;
         let hasPendingChanges = false;
         let isSaving = false;
 
+        function notasApiUrl(query) {
+            return `?${query}&_notas_nonce=${encodeURIComponent(notasActionNonce)}`;
+        }
+
         // Carrega todas as notas
         async function loadNotes() {
             try {
-                const response = await fetch('?action=list');
+                const response = await fetch(notasApiUrl('action=list'));
                 if (!response.ok) throw new Error('Erro na requisição');
                 notes = await response.json();
                 renderNotesList();
@@ -794,7 +1098,7 @@ if (isset($_GET['action'])) {
                     await saveNote({ ...currentNote });
                 }
 
-                const response = await fetch(`?action=get&id=${id}`);
+                const response = await fetch(notasApiUrl(`action=get&id=${encodeURIComponent(id)}`));
                 if (!response.ok) throw new Error('Erro na requisição');
                 currentNote = await response.json();
                 if (!currentNote || !currentNote.id) throw new Error('Nota não encontrada');
@@ -902,7 +1206,7 @@ if (isset($_GET['action'])) {
                 formData.append('title', noteToSave.title || 'Nova Nota');
                 formData.append('content', noteToSave.content || '');
 
-                const response = await fetch('?action=update', {
+                const response = await fetch(notasApiUrl('action=update'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -963,7 +1267,7 @@ if (isset($_GET['action'])) {
                     await saveNote({ ...currentNote });
                 }
 
-                const response = await fetch('?action=create', {
+                const response = await fetch(notasApiUrl('action=create'), {
                     method: 'POST',
                     cache: 'no-store'
                 });
@@ -999,7 +1303,7 @@ if (isset($_GET['action'])) {
             if (!confirm('Tem certeza que deseja deletar esta nota?')) return;
             
             try {
-                await fetch(`?action=delete&id=${currentNote.id}`);
+                await fetch(notasApiUrl(`action=delete&id=${encodeURIComponent(currentNote.id)}`));
                 
                 notes = notes.filter(n => n.id !== currentNote.id);
                 currentNote = null;
@@ -1024,7 +1328,7 @@ if (isset($_GET['action'])) {
                 }
                 
                 try {
-                    const response = await fetch(`?action=search&q=${encodeURIComponent(query)}`);
+                    const response = await fetch(notasApiUrl(`action=search&q=${encodeURIComponent(query)}`));
                     if (!response.ok) throw new Error('Erro na requisição');
                     notes = await response.json();
                     renderNotesList();
@@ -1180,9 +1484,9 @@ if (isset($_GET['action'])) {
 
             if (navigator.sendBeacon) {
                 const payload = new Blob([formData.toString()], { type: 'application/x-www-form-urlencoded' });
-                navigator.sendBeacon('?action=update', payload);
+                navigator.sendBeacon(notasApiUrl('action=update'), payload);
             } else {
-                fetch('?action=update', {
+                fetch(notasApiUrl('action=update'), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
