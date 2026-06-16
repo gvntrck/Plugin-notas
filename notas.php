@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
- * Version: 1.2.8
+ * Version: 1.2.9
  * Author: gvntrck
  * Author URI: https://projetoalfa.org
  * License: GPLv2 or later
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('NOTAS_VERSION', '1.2.8');
+define('NOTAS_VERSION', '1.2.9');
 define('NOTAS_PIN_OPTION', 'notas_pin_hash');
 define('NOTAS_PIN_COOKIE', 'notas_pin_auth');
 
@@ -444,7 +444,7 @@ if (isset($_GET['action'])) {
             
             $id = isset($data['id']) ? intval($data['id']) : 0;
             $title = isset($data['title']) ? sanitize_text_field($data['title']) : '';
-            $content = isset($data['content']) ? implode("\n", array_map('sanitize_textarea_field', explode("\n", $data['content']))) : ''; // Preserva quebras de linha melhor
+            $content = isset($data['content']) ? (string) $data['content'] : '';
             
             // Se ainda assim não tivermos dados, tenta ler direto do input cru
             if (!$id && !$title && !$content) {
@@ -453,7 +453,7 @@ if (isset($_GET['action'])) {
                     $data = $parsed_input;
                     $id = isset($data['id']) ? intval($data['id']) : 0;
                     $title = isset($data['title']) ? sanitize_text_field($data['title']) : '';
-                    $content = isset($data['content']) ? $data['content'] : '';
+                    $content = isset($data['content']) ? (string) wp_unslash($data['content']) : '';
                 }
             }
             
