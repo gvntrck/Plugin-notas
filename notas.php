@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
- * Version: 1.2.9
+ * Version: 1.3.0
  * Author: gvntrck
  * Author URI: https://projetoalfa.org
  * License: GPLv2 or later
@@ -10,7 +10,27 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('NOTAS_VERSION', '1.2.9');
+
+require 'plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$myUpdateChecker = PucFactory::buildUpdateChecker(
+	'https://github.com/gvntrck/Plugin-notas',
+	__FILE__,
+	'https://github.com/gvntrck/Plugin-notas'
+);
+
+//Set the branch that contains the stable release.
+$myUpdateChecker->setBranch('main');
+
+
+
+
+
+
+
+
+define('NOTAS_VERSION', '1.3.0');
 define('NOTAS_PIN_OPTION', 'notas_pin_hash');
 define('NOTAS_PIN_COOKIE', 'notas_pin_auth');
 

@@ -6,5 +6,6 @@ node_modules/
 .vscode/
 out/
 
-# Manter apenas o arquivo notas.php
+# Manter apenas o arquivo notas.php e plugin-update-checker
 !notas.php
+!plugin-update-checker/
