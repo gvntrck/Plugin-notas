@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
- * Version: 1.3.1
+ * Version: 1.4.0
  * Author: gvntrck
  * Author URI: https://projetoalfa.org
  * License: GPLv2 or later
@@ -30,7 +30,7 @@ $myUpdateChecker->setBranch('main');
 
 
 
-define('NOTAS_VERSION', '1.3.1');
+define('NOTAS_VERSION', '1.4.0');
 define('NOTAS_PIN_OPTION', 'notas_pin_hash');
 define('NOTAS_PIN_COOKIE', 'notas_pin_auth');
 
@@ -215,6 +215,7 @@ function notas_ensure_table() {
         id bigint(20) NOT NULL AUTO_INCREMENT,
         title varchar(255) DEFAULT 'Nova Nota',
         content longtext,
+        pinned tinyint(1) NOT NULL DEFAULT 0,
         created_at datetime DEFAULT CURRENT_TIMESTAMP,
         updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY  (id),
@@ -419,9 +420,9 @@ if (isset($_GET['action'])) {
     switch ($_GET['action']) {
         case 'list':
             $notes = $wpdb->get_results(
-                "SELECT id, title, LEFT(content, 100) as preview, updated_at 
+                "SELECT id, title, LEFT(content, 100) as preview, pinned, updated_at 
                 FROM $table_name 
-                ORDER BY updated_at DESC"
+                ORDER BY pinned DESC, updated_at DESC"
             );
             echo json_encode($notes);
             exit;
@@ -524,15 +525,34 @@ if (isset($_GET['action'])) {
             $wpdb->delete($table_name, array('id' => $id));
             echo json_encode(array('success' => true));
             exit;
+
+        case 'pin':
+            $id = isset($_REQUEST['id']) ? intval($_REQUEST['id']) : 0;
+            if ($id <= 0) {
+                http_response_code(400);
+                echo json_encode(['error' => 'ID inválido']);
+                exit;
+            }
+            $wpdb->query(
+                $wpdb->prepare(
+                    "UPDATE $table_name SET pinned = IF(pinned = 1, 0, 1), updated_at = updated_at WHERE id = %d",
+                    $id
+                )
+            );
+            $note = $wpdb->get_row(
+                $wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $id)
+            );
+            echo json_encode($note);
+            exit;
             
         case 'search':
             $query = isset($_GET['q']) ? sanitize_text_field(wp_unslash($_GET['q'])) : '';
             $notes = $wpdb->get_results(
                 $wpdb->prepare(
-                    "SELECT id, title, LEFT(content, 100) as preview, updated_at 
+                    "SELECT id, title, LEFT(content, 100) as preview, pinned, updated_at 
                     FROM $table_name 
                     WHERE title LIKE %s OR content LIKE %s 
-                    ORDER BY updated_at DESC",
+                    ORDER BY pinned DESC, updated_at DESC",
                     '%' . $wpdb->esc_like($query) . '%',
                     '%' . $wpdb->esc_like($query) . '%'
                 )
@@ -643,6 +663,40 @@ if (isset($_GET['action'])) {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .pin-badge {
+            flex-shrink: 0;
+            color: #0d6efd;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .pin-btn {
+            padding: 8px 14px;
+            background: #e9ecef;
+            color: #212529;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .pin-btn:hover {
+            background: #dee2e6;
+        }
+
+        .pin-btn.pinned {
+            background: #0d6efd;
+            color: #fff;
+            border-color: #0d6efd;
         }
         
         .note-preview {
@@ -858,6 +912,26 @@ if (isset($_GET['action'])) {
         
         body.dark-mode .delete-btn:hover {
             background: #c53030;
+        }
+
+        body.dark-mode .pin-badge {
+            color: #63b3ed;
+        }
+
+        body.dark-mode .pin-btn {
+            background: #4a5568;
+            color: #e9ecef;
+            border-color: #718096;
+        }
+
+        body.dark-mode .pin-btn:hover {
+            background: #718096;
+        }
+
+        body.dark-mode .pin-btn.pinned {
+            background: #3182ce;
+            color: #fff;
+            border-color: #3182ce;
         }
         
         body.dark-mode .back-btn {
@@ -1098,6 +1172,12 @@ if (isset($_GET['action'])) {
             }
         }
 
+        const pinSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>';
+
+        function sortNotes() {
+            notes.sort((a, b) => (Number(b.pinned) - Number(a.pinned)) || (new Date(b.updated_at) - new Date(a.updated_at)));
+        }
+
         // Renderiza a lista de notas
         function renderNotesList() {
             const notesList = document.getElementById('notesList');
@@ -1111,7 +1191,10 @@ if (isset($_GET['action'])) {
                 <div class="note-item ${currentNote && currentNote.id === note.id ? 'active' : ''}" 
                      data-id="${note.id}" 
                      onclick="selectNote(${note.id})">
-                    <div class="note-title">${escapeHtml(note.title || 'Nova Nota')}</div>
+                    <div class="note-title">
+                        <span style="overflow: hidden; text-overflow: ellipsis;">${escapeHtml(note.title || 'Nova Nota')}</span>
+                        ${Number(note.pinned) ? `<span class="pin-badge" title="Fixada no topo">${pinSvg}</span>` : ''}
+                    </div>
                     <div class="note-preview">${escapeHtml(stripHtml(note.preview || ''))}</div>
                     <div class="note-date">${formatDate(note.updated_at)}</div>
                     <div class="date-tooltip">Atualizado: ${formatFullDate(note.updated_at)}</div>
@@ -1167,7 +1250,10 @@ if (isset($_GET['action'])) {
             editorContainer.innerHTML = `
                 <div class="editor-header">
                     <button class="back-btn" onclick="backToList()">← Voltar</button>
-                    <div style="display: flex; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button class="pin-btn ${Number(currentNote.pinned) ? 'pinned' : ''}" id="pinBtn" onclick="togglePin()">
+                            ${pinSvg} ${Number(currentNote.pinned) ? 'Fixada' : 'Fixar no topo'}
+                        </button>
                         <button class="delete-btn" onclick="deleteNote()">Deletar</button>
                         <span class="save-indicator" id="saveIndicator">Salvo</span>
                     </div>
@@ -1272,10 +1358,10 @@ if (isset($_GET['action'])) {
                         ...notes[index],
                         title: updatedNote.title,
                         preview: updatedNote.content,
+                        pinned: updatedNote.pinned,
                         updated_at: updatedNote.updated_at
                     };
-                    // Reordena por data de atualização
-                    notes.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                    sortNotes();
                     renderNotesList();
                 }
                 return true;
@@ -1308,8 +1394,10 @@ if (isset($_GET['action'])) {
                     id: newNote.id,
                     title: newNote.title,
                     preview: '',
+                    pinned: newNote.pinned || 0,
                     updated_at: newNote.updated_at
                 });
+                sortNotes();
                 
                 currentNote = newNote;
                 renderNotesList();
@@ -1322,6 +1410,37 @@ if (isset($_GET['action'])) {
                 }, 100);
             } catch (error) {
                 console.error('Erro ao criar nota:', error);
+            }
+        }
+
+        // Fixa/desafixa a nota atual no topo
+        async function togglePin() {
+            if (!currentNote) return;
+
+            try {
+                const response = await fetch(notasApiUrl(`action=pin&id=${encodeURIComponent(currentNote.id)}`), {
+                    method: 'POST'
+                });
+                if (!response.ok) throw new Error('Erro na requisição');
+                const updatedNote = await response.json();
+                if (!updatedNote || !updatedNote.id) throw new Error('Resposta inválida');
+
+                currentNote.pinned = updatedNote.pinned;
+
+                const index = notes.findIndex(n => String(n.id) === String(updatedNote.id));
+                if (index !== -1) {
+                    notes[index].pinned = updatedNote.pinned;
+                    sortNotes();
+                    renderNotesList();
+                }
+                const pinBtn = document.getElementById('pinBtn');
+                if (pinBtn) {
+                    const isPinned = Boolean(Number(currentNote.pinned));
+                    pinBtn.classList.toggle('pinned', isPinned);
+                    pinBtn.innerHTML = `${pinSvg} ${isPinned ? 'Fixada' : 'Fixar no topo'}`;
+                }
+            } catch (error) {
+                console.error('Erro ao fixar nota:', error);
             }
         }
 
