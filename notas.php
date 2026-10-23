@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Sistema de Notas
  * Description: Sistema de notas acessível em /notas
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: gvntrck
  * Author URI: https://projetoalfa.org
  * License: GPLv2 or later
@@ -30,7 +30,7 @@ $myUpdateChecker->setBranch('main');
 
 
 
-define('NOTAS_VERSION', '1.3.0');
+define('NOTAS_VERSION', '1.3.1');
 define('NOTAS_PIN_OPTION', 'notas_pin_hash');
 define('NOTAS_PIN_COOKIE', 'notas_pin_auth');
 
@@ -267,6 +267,14 @@ function notas_render_pin_screen($error = '') {
             font-weight: 650;
         }
 
+        .pin-label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+        }
+
         .pin-input {
             width: 100%;
             height: 48px;
@@ -334,7 +342,8 @@ function notas_render_pin_screen($error = '') {
 
             <form method="post" action="">
                 <?php wp_nonce_field('notas_pin_login'); ?>
-                <input class="pin-input" type="password" name="notas_pin" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus required>
+                <label class="pin-label" for="notas_pin">Digite o PIN</label>
+                <input class="pin-input" id="notas_pin" type="password" name="notas_pin" placeholder="PIN" inputmode="numeric" pattern="[0-9]*" autocomplete="current-password" autofocus required>
                 <button class="pin-button" type="submit">Entrar</button>
             </form>
         <?php endif; ?>
